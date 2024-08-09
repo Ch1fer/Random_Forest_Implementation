@@ -196,41 +196,42 @@ src = "Diabets_large.csv"
 size_test_data = 0.3
 target_column = "Outcome"
 non_informative_columns = []
-positive_value = 1  # Hodnoty v cieľovom stĺpci, ktoré by sa mali považovať za pozitívne
-negative_value = 0  # Hodnoty v cieľovom stĺpci, ktoré by sa mali považovať za negatívne
+positive_value = 1  # Values in the target column that should be considered positive
+negative_value = 0  # Values in the target column that should be considered negative
 
 
 # ___PREPARE_DATA___
-data = pd.read_csv(src)  # Stiahnutie datasetu
+data = pd.read_csv(src)
 print(f"initial size of the dataset: {data.shape[0]} rows, {data.shape[1]} columns")
 
-data.dropna(inplace=True)  # odstránenie neúplných riadkov
+data.dropna(inplace=True)  # removing incomplete lines
 data = data.drop(non_informative_columns, axis=1)
 print(f"dataset size after deleting incomplete rows: {data.shape[0]} rows, {data.shape[1]} columns\n")
 
-if target_column != data.columns[-1]:  # Ak je cieľový stĺpec nie je posledný, zmeníme ho s posledným
+if target_column != data.columns[-1]:  # If the target column is not the last one, we change it with the last
     old_targ = data.columns[-1]
     data[old_targ], data[target_column] = data[target_column], data[old_targ]
     data = data.rename(columns={target_column: old_targ, old_targ: target_column})
     print(f"the target column \"{target_column}\" was moved to the last position\n")
 
 value_counts = data[
-    target_column].value_counts().to_string()  # Zobrazenie počtu pozitívnych a negatívnych príkladov v súbore údajov
+    target_column].value_counts().to_string()  # Displaying the number of positive and negative examples in the dataset
 print(f"{value_counts}\n")
 
-# Ak existuje veľká nerovnováha v počte kladných a záporných riadkov,
-# odstránime niekoľko náhodných riadkov prevažujúcej triedy, aby sme dosiahli rovnováhu.
+# If there is a large imbalance in the number of positive and negative rows,
+# we remove a few random rows of the predominant class to achieve balance.
 negative_data = data[data['Outcome'] == negative_value]
-random_negative_rows = negative_data.sample(n=540)  # n je potrebné nahradiť počtom riadkov, ktoré chcete vymazať
+random_negative_rows = negative_data.sample(n=540)  # n should be replaced by the number of lines you want to delete
 data = data.drop(random_negative_rows.index)
 
-value_counts = data[target_column].value_counts().to_string()  # Po vyvážení skontrolujeme počet príkladov rôznych tried
+value_counts = data[target_column].value_counts().to_string()
+# After balancing, we check the number of examples of different classes
 print(f"{value_counts}\n")
 
-shuffled_data = data.sample(frac=1).reset_index(drop=True)  # Zmiešanie datasetu
+shuffled_data = data.sample(frac=1).reset_index(drop=True)  # Shuffle
 size_data = len(shuffled_data)
 
-# Rozdelenie zmiešaného súboru údajov na tréningovú a testovaciu časť
+# Splitting the dataset into training and test parts
 IdxSplit = round(size_data * (1.0 - size_test_data))
 
 training_data = shuffled_data.iloc[:IdxSplit]
@@ -243,9 +244,9 @@ print(f"train size: {size_training}, test size: {len(test_data)}")
 
 # ___ALGORITHM___
 
-# Hyperparametre na vytvorenie náhodného lesa
-countColumns = math.ceil(math.sqrt(len(set(training_data))) + 1)  # Počet náhodných stĺpcov pre bootstrap vzorku
-countRows = round(0.7 * size_training)  # odporúčaná veľkosť 60 - 80 % veľkosti tréningových údajov
+# Hyperparameters to generate a random forest
+countColumns = math.ceil(math.sqrt(len(set(training_data))) + 1)  # Number of random columns for bootstrap sample
+countRows = round(0.7 * size_training)  # recommended size 60-80% of the training data size
 countTrees = 100
 
 print(f"Hyperparameters:\ncount of trees: {countTrees}\nsubset columns: {countColumns}\nsubset rows: {countRows}\n")
@@ -258,44 +259,46 @@ all_columns.discard(training_data.columns[-1])
 for i in range(countTrees):
     random_columns = np.random.choice(list(all_columns), countColumns, replace=False).tolist()
     random_columns.append(training_data.columns[-1])
-    random_rows = random.choices(range(size_training), k=countRows)  # Náhodný výber riadkov pre podskupinu bootstrap
+    random_rows = random.choices(range(size_training), k=countRows)  # Random row selection for bootstrap subset
+    # Here we select random columns from the subset with random rows along with the target column
 
     current_dataset = training_data[random_columns]
-    current_dataset = current_dataset.iloc[random_rows]  # Tu z podskupiny s náhodnými riadkami vyberieme
-    # náhodné stĺpce spolu s cieľovým stĺpcom
+    current_dataset = current_dataset.iloc[random_rows]
 
-    tree = built_decision_tree(current_dataset)  # pomocou funkcie vytvoríme z podskupiny bootstrap rozhodovací strom
-    trees.append(tree)  # a pridáme tento strom do zoznamu stromov
+    # use the function to create a decision tree from a subset of the bootstrap
+    tree = built_decision_tree(current_dataset)
+    trees.append(tree)
 
 print(f"{countTrees} trees was created\n")
 
 print(f"Testing...\n")
 
-# Počítadlá pre metriky
+# Counters for metrics
 true_positive = 0
 false_positive = 0
 false_negative = 0
 true_negative = 0
 
-for i in range(size_test):  # cyklus testovania
-    row = test_data.iloc[i]  # Správna trieda
+for i in range(size_test):
+    row = test_data.iloc[i]  # The correct class
     answers = []
 
-    for tree in trees:  # Prechádzame všetky stromy a zbierame ich predpovede do zoznamu
+    for tree in trees:  # We go through all the trees and collect their predictions into a list
         answers.append(predict(tree, row))
 
     dict_answers = {}
-    for answer in answers:  # Zoskupujeme predpovede stromov do slovníka
+    for answer in answers:  # Grouping tree predictions into a dictionary
         if answer == None:
             continue
         if answer in dict_answers:
             dict_answers[answer] += 1
         else:
             dict_answers[answer] = 0
-    decision = max(dict_answers,
-                   key=dict_answers.get)  # Najčastejšia odpoveď v slovníku bude našou predpovedanou triedou
 
-    # Porovnáme predpovedanú odpoveď so skutočnou a zoskupte ju do počítadiel pre metriku
+    # The most common answer in the dictionary will be our predicted class
+    decision = max(dict_answers, key=dict_answers.get)
+
+    # Compare the predicted answer with the actual answer and group it into counters for the metric
     if row.iloc[-1] == positive_value:
         if row.iloc[-1] == decision:
             true_positive += 1
@@ -309,16 +312,16 @@ for i in range(size_test):  # cyklus testovania
 
 print(f"TP: {true_positive}, FP: {false_positive}, FN: {false_negative}, TN: {true_negative}")
 
-# Nakoniec vypočítame naše metriky
+# Finally, we calculate our metrics
 if true_positive == 0:
     precision = 0
     recall = 0
     f1 = 0
 else:
-    precision = true_positive / (true_positive + false_positive)  # Presnosť
-    recall = true_positive / (true_positive + false_negative)  # Návratnosť
-    f1 = 2 * precision * recall / (precision + recall)  # F1
-accuracy = (true_positive + true_negative) / size_test  # Správnosť
+    precision = true_positive / (true_positive + false_positive)
+    recall = true_positive / (true_positive + false_negative)
+    f1 = 2 * precision * recall / (precision + recall)
+accuracy = (true_positive + true_negative) / size_test
 
 print(f"precision: {precision}")
 print(f"accuracy: {accuracy}")
